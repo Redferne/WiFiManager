@@ -91,7 +91,7 @@
 #include "strings_en.h"
 
 #ifndef WIFI_MANAGER_MAX_PARAMS
-    #define WIFI_MANAGER_MAX_PARAMS 5 // params will autoincrement and realloc by this amount when max is reached
+    #define WIFI_MANAGER_MAX_PARAMS 15 // params will autoincrement and realloc by this amount when max is reached
 #endif
 
 #define WFM_LABEL_BEFORE 1
@@ -107,6 +107,7 @@ class WiFiManagerParameter {
     WiFiManagerParameter(const char *custom);
     WiFiManagerParameter(const char *id, const char *placeholder);
     WiFiManagerParameter(const char *id, const char *placeholder, const char *defaultValue, int length);
+    WiFiManagerParameter(const char *id, const char *placeholder, const char *defaultValue, int length, bool isBoolean);
     WiFiManagerParameter(const char *id, const char *placeholder, const char *defaultValue, int length, const char *custom);
     WiFiManagerParameter(const char *id, const char *placeholder, const char *defaultValue, int length, const char *custom, int labelPlacement);
     ~WiFiManagerParameter();
@@ -118,6 +119,7 @@ class WiFiManagerParameter {
     int         getLabelPlacement();
     const char *getCustomHTML();
     void        setValue(const char *defaultValue, int length);
+    bool        getType();
   private:
     const char *_id;
     const char *_placeholder;
@@ -125,9 +127,10 @@ class WiFiManagerParameter {
     int         _length;
     int         _labelPlacement;
     const char *_customHTML;
+    bool        _isBoolean;
 
     void init(const char *id, const char *placeholder, const char *defaultValue, int length, const char *custom);
-    void init(const char *id, const char *placeholder, const char *defaultValue, int length, const char *custom, int labelPlacement);
+    void init(const char *id, const char *placeholder, const char *defaultValue, int length, const char *custom, int labelPlacement, bool isBoolean);
 
     friend class WiFiManager;
 };
@@ -150,8 +153,7 @@ class WiFiManager
     boolean       startConfigPortal(char const *apName, char const *apPassword = NULL);
 
     //manually stop the config portal if started manually
-    boolean       stopConfigPortal();
-    
+    boolean       stopConfigPortal();    
     //manually start the web portal, autoconnect does this automatically on connect failure    
     void          startWebPortal();
     //manually stop the web portal if started manually
@@ -303,7 +305,6 @@ class WiFiManager
     bool          _disableSTA             = false; // disable sta when starting ap, always
     bool          _disableSTAConn         = true;  // disable sta when starting ap, if sta is not connected ( stability )
     bool          _channelSync            = false; // use wifi channel when starting ap
-
     #ifdef ESP32
     static uint8_t _lastconxresulttmp; // tmp var for esp32 callback
     #endif

@@ -25,30 +25,36 @@ uint8_t WiFiManager::_lastconxresulttmp = WL_IDLE_STATUS;
 WiFiManagerParameter::WiFiManagerParameter(const char *custom) {
   _id             = NULL;
   _placeholder    = NULL;
-  _length         = 1;
+  _length         = 0;
   _value          = NULL;
   _labelPlacement = WFM_LABEL_BEFORE;
   _customHTML     = custom;
+  _isBoolean      = false;
 }
 
 WiFiManagerParameter::WiFiManagerParameter(const char *id, const char *placeholder) {
-  init(id, placeholder, "", 0, "", WFM_LABEL_BEFORE);
+  init(id, placeholder, "", 0, "", WFM_LABEL_BEFORE, false);
 }
 
 WiFiManagerParameter::WiFiManagerParameter(const char *id, const char *placeholder, const char *defaultValue, int length) {
-  init(id, placeholder, defaultValue, length, "", WFM_LABEL_BEFORE);
+  init(id, placeholder, defaultValue, length, "", WFM_LABEL_BEFORE, false);
+}
+
+WiFiManagerParameter::WiFiManagerParameter(const char *id, const char *placeholder, const char *defaultValue, int length, bool isBoolean) {
+  init(id, placeholder, defaultValue, length, "", WFM_LABEL_BEFORE, isBoolean);
 }
 
 WiFiManagerParameter::WiFiManagerParameter(const char *id, const char *placeholder, const char *defaultValue, int length, const char *custom) {
-  init(id, placeholder, defaultValue, length, custom, WFM_LABEL_BEFORE);
+  init(id, placeholder, defaultValue, length, custom, WFM_LABEL_BEFORE, false);
 }
 
 WiFiManagerParameter::WiFiManagerParameter(const char *id, const char *placeholder, const char *defaultValue, int length, const char *custom, int labelPlacement) {
-  init(id, placeholder, defaultValue, length, custom, labelPlacement);
+  init(id, placeholder, defaultValue, length, custom, labelPlacement, false);
 }
 
-void WiFiManagerParameter::init(const char *id, const char *placeholder, const char *defaultValue, int length, const char *custom, int labelPlacement) {
+void WiFiManagerParameter::init(const char *id, const char *placeholder, const char *defaultValue, int length, const char *custom, int labelPlacement, bool isBoolean) {
   _id             = id;
+  _isBoolean      = isBoolean;
   _placeholder    = placeholder;
   _labelPlacement = labelPlacement;
   _customHTML     = custom;
@@ -62,12 +68,12 @@ WiFiManagerParameter::~WiFiManagerParameter() {
   _length=0; // setting length 0, ideally the entire parameter should be removed, or added to wifimanager scope so it follows
 }
 
+bool WiFiManagerParameter::getType() {
+  return _isBoolean;
+}
+
 void WiFiManagerParameter::setValue(const char *defaultValue, int length) {
-  if(!_id){
-    // Serial.println("cannot set value of this parameter");
-    return;
-  }
-  _length       = length;
+  _length   = length;
   int deflength = strlen(defaultValue); // length actual
   // use the defult length if it's longer, 
   // @todo consider it might be useful to fail, so user knows they were wrong
@@ -353,13 +359,13 @@ bool WiFiManager::startAP(){
     }  
     else{
       ret = WiFi.softAP(_apName.c_str());
-    }  
+    }
   }
 
   if(_debugLevel > DEBUG_DEV) debugSoftAPConfig();
 
   if(!ret) DEBUG_WM(DEBUG_ERROR,"[ERROR] There was a problem starting the AP");
-  // @todo add softAP retry here
+  // @tood add softAP retry here
   
   delay(500); // slight delay to make sure we get an AP IP
   DEBUG_WM(F("AP IP address:"),WiFi.softAPIP());
@@ -405,7 +411,7 @@ boolean WiFiManager::configPortalHasTimeout(){
     if(_configPortalTimeout == 0 || (_cpClientCheck && (WiFi_softap_num_stations() > 0))){
       if(millis() - timer > 30000){
         timer = millis();
-        DEBUG_WM(DEBUG_VERBOSE,"NUM CLIENTS: " + (String)WiFi_softap_num_stations());
+        DEBUG_WM(DEBUG_VERBOSE,"Clients: " + (String)WiFi_softap_num_stations());
       }
       _configPortalStart = millis(); // kludge, bump configportal start time to skew timeouts
       return false;
@@ -419,10 +425,17 @@ boolean WiFiManager::configPortalHasTimeout(){
     } else if(_debugLevel > 0) {
       // log timeout
       if(_debug){
+        #if 0
         uint16_t logintvl = 30000; // how often to emit timeing out counter logging
         if((millis() - timer) > logintvl){
           timer = millis();
           DEBUG_WM(DEBUG_VERBOSE,F("Portal Timeout In"),(String)((_configPortalStart + _configPortalTimeout-millis())/1000) + (String)F(" seconds"));
+        }
+        #endif
+        uint16_t logintvl = 2000; // how often to emit timeing out counter logging
+        if((millis() - timer) > logintvl){
+          timer = millis();
+          DEBUG_WM(DEBUG_VERBOSE,F("|"));
         }
       }
     }
@@ -441,8 +454,8 @@ void WiFiManager::setupConfigPortal() {
   /* Setup the DNS server redirecting all the domains to the apIP */
   dnsServer->setErrorReplyCode(DNSReplyCode::NoError);
   // DEBUG_WM("dns server started port: ",DNS_PORT);
-  DEBUG_WM(DEBUG_DEV,"dns server started with ip: ",WiFi.softAPIP());
-  dnsServer->start(DNS_PORT, F("*"), WiFi.softAPIP());
+  DEBUG_WM(DEBUG_VERBOSE,"dns server started with ip: ",WiFi.softAPIP());
+  dnsServer->start(DNS_PORT, "*", WiFi.softAPIP());
 
   /* Setup httpd callbacks, web pages: root, wifi config pages, SO captive portal detectors and not found. */
   server->on(String(FPSTR(R_root)).c_str(),       std::bind(&WiFiManager::handleRoot, this));
@@ -477,8 +490,9 @@ boolean WiFiManager::startConfigPortal() {
  * @param  {[type]} char const         *apPassword [description]
  * @return {[type]}      [description]
  */
-boolean  WiFiManager::startConfigPortal(char const *apName, char const *apPassword) {
+boolean WiFiManager::startConfigPortal(char const *apName, char const *apPassword) {
   _begin();
+
 
   //setup AP
   _apName     = apName; // @todo check valid apname ?
@@ -486,8 +500,10 @@ boolean  WiFiManager::startConfigPortal(char const *apName, char const *apPasswo
   
   if(_apName == "") _apName = _wifissidprefix + "_" + String(WIFI_getChipId(),HEX);
   if(!validApPassword()) return false;
+
+//  _disableSTA = true;
   
-  // HANDLE issues with STA connections, shutdown sta if not connected, or else this will hang channel scanning and softap will not respond
+    // HANDLE issues with STA connections, shutdown sta if not connected, or else this will hang channel scanning and softap will not respond
   // @todo sometimes still cannot connect to AP for no known reason, no events in log either
   if(_disableSTA || (!WiFi.isConnected() && _disableSTAConn)){
     // this fixes most ap problems, however, simply doing mode(WIFI_AP) does not work if sta connection is hanging, must `wifi_station_disconnect` 
@@ -540,8 +556,8 @@ boolean  WiFiManager::startConfigPortal(char const *apName, char const *apPasswo
         result = (state == WL_CONNECTED); // true if connected
         break;
     }
-
-    yield(); // watchdog
+    delay(10);
+//    yield(); // watchdog
   }
 
   DEBUG_WM(DEBUG_NOTIFY,F("config portal exiting"));
@@ -564,9 +580,13 @@ boolean WiFiManager::process(){
 //using esp enums returns for now, should be fine
 uint8_t WiFiManager::processConfigPortal(){
     //DNS handler
+//    DEBUG_WM(DEBUG_VERBOSE,F("process dns"));
     dnsServer->processNextRequest();
+    yield(); // watchdog
     //HTTP handler
+//    DEBUG_WM(DEBUG_VERBOSE,F("process web"));
     server->handleClient();
+    yield(); // watchdog
 
     // Waiting for save...
     if(connect) {
@@ -594,7 +614,7 @@ uint8_t WiFiManager::processConfigPortal(){
         }
         DEBUG_WM(DEBUG_ERROR,F("[ERROR] Connect to new AP Failed"));
       }
- 
+
       if (_shouldBreakAfterConfig) {
         // do save callback
         // @todo this is more of an exiting callback than a save, clarify when this should actually occur
@@ -661,7 +681,6 @@ boolean WiFiManager::stopConfigPortal(){
   DEBUG_WM(DEBUG_VERBOSE,"wifi status:",getWLStatusString(WiFi.status()));
   DEBUG_WM(DEBUG_VERBOSE,"wifi mode:",getModeString(WiFi.getMode()));
   configPortalActive = false;
-  _end();
   return ret;
 }
 
@@ -679,6 +698,7 @@ uint8_t WiFiManager::connectWifi(String ssid, String pass) {
   // make sure sta is on before `begin` so it does not call enablesta->mode while persistent is ON ( which would save WM AP state to eeprom !)
   if(_cleanConnect) WiFi_Disconnect(); // disconnect before begin, in case anything is hung, this causes a 2 seconds delay for connect
   // @todo find out what status is when this is needed, can we detect it and handle it, say in between states or idle_status
+  WiFi_Disconnect(); // disconnect before begin, in case anything is hung, this causes a 2 seconds delay for connect
 
   // if ssid argument provided connect to that
   if (ssid != "") {
@@ -993,7 +1013,6 @@ void WiFiManager::WiFi_scanComplete(int networksFound){
 bool WiFiManager::WiFi_scanNetworks(){
   return WiFi_scanNetworks(false,false);
 }
-
 bool WiFiManager::WiFi_scanNetworks(unsigned int cachetime,bool async){
     return WiFi_scanNetworks(millis()-_lastscan > cachetime,async);
 }
@@ -1199,28 +1218,53 @@ String WiFiManager::getParamOut(){
     char parLength[5];
     // add the extra parameters to the form
     for (int i = 0; i < _paramsCount; i++) {
-      if (_params[i] == NULL || _params[i]->_length == 0) {
+      if (_params[i] == NULL) {
+        DEBUG_WM(DEBUG_ERROR,"[ERROR] WiFiManagerParameter is NULL:", i);
+        break;
+      }
+/*
+      if (_params[i]->_length == 0) {
+        DEBUG_WM(DEBUG_ERROR,"[ERROR] WiFiManagerParameter length is null", i);
+        break;
+      }
+        if (_params[i] == NULL || _params[i]->_length == 0) {
         DEBUG_WM(DEBUG_ERROR,"[ERROR] WiFiManagerParameter is out of scope");
         break;
       }
-
+*/
      // label before or after, this could probably be done via floats however
      String pitem;
-      switch (_params[i]->getLabelPlacement()) {
-        case WFM_LABEL_BEFORE:
-          pitem = FPSTR(HTTP_FORM_LABEL);
-          pitem += FPSTR(HTTP_FORM_PARAM);
-          break;
-        case WFM_LABEL_AFTER:
-          pitem = FPSTR(HTTP_FORM_PARAM);
-          pitem += FPSTR(HTTP_FORM_LABEL);
-          break;
-        default:
-          // WFM_NO_LABEL
-          pitem = FPSTR(HTTP_FORM_PARAM);
-          break;
+      if (!_params[i]->getType()) {
+        switch (_params[i]->getLabelPlacement()) {
+          case WFM_LABEL_BEFORE:
+            pitem = FPSTR(HTTP_FORM_LABEL);
+            pitem += FPSTR(HTTP_FORM_PARAM);
+            break;
+          case WFM_LABEL_AFTER:
+            pitem = FPSTR(HTTP_FORM_PARAM);
+            pitem += FPSTR(HTTP_FORM_LABEL);
+            break;
+          default:
+            // WFM_NO_LABEL
+            pitem = FPSTR(HTTP_FORM_PARAM);
+            break;
+        }
+      } else {
+        switch (_params[i]->getLabelPlacement()) {
+          case WFM_LABEL_BEFORE:
+            pitem = FPSTR(HTTP_FORM_LABEL);
+            pitem += FPSTR(HTTP_FORM_BOOL_PARAM);
+            break;
+          case WFM_LABEL_AFTER:
+            pitem = FPSTR(HTTP_FORM_BOOL_PARAM);
+            pitem += FPSTR(HTTP_FORM_LABEL);
+            break;
+          default:
+            // WFM_NO_LABEL
+            pitem = FPSTR(HTTP_FORM_BOOL_PARAM);
+            break;
+        }
       }
-
       // if no ID use customhtml for item, else generate from param string
       if (_params[i]->getID() != NULL) {
         if(tok_I)pitem.replace(FPSTR(T_I), (String)FPSTR(S_parampre)+(String)i);
@@ -1230,8 +1274,16 @@ String WiFiManager::getParamOut(){
         if(tok_t)pitem.replace(FPSTR(T_t), _params[i]->getPlaceholder());
         snprintf(parLength, 5, "%d", _params[i]->getValueLength());
         if(tok_l)pitem.replace(FPSTR(T_l), parLength);
-        if(tok_v)pitem.replace(FPSTR(T_v), _params[i]->getValue());
-        if(tok_c)pitem.replace(FPSTR(T_c), _params[i]->getCustomHTML()); // meant for additional attributes, not html
+        if (!_params[i]->getType()) {
+          if(tok_v)pitem.replace(FPSTR(T_v), _params[i]->getValue());
+          if(tok_c)pitem.replace(FPSTR(T_c), _params[i]->getCustomHTML()); // meant for additional attributes, not html
+        } else {
+          if((bool) atoi(_params[i]->getValue())) {
+            if(tok_c)pitem.replace(FPSTR(T_b), "checked");
+          } else {
+            if(tok_c)pitem.replace(FPSTR(T_b), "");
+          }
+        }
       } else {
         pitem = _params[i]->getCustomHTML();
       }
@@ -1365,7 +1417,7 @@ void WiFiManager::handleInfo() {
 
   //@todo convert to enum or refactor to strings
   #ifdef ESP8266
-    infos = 27;
+      infos = 27;
     String infoids[] = {
       F("esphead"),
       F("uptime"),
@@ -1397,8 +1449,8 @@ void WiFiManager::handleInfo() {
     };
 
   #elif defined(ESP32)
-    infos = 22;
-    String infoids[] = {
+      infos = 22;
+      String infoids[] = {
       F("esphead"),
       F("uptime"),
       F("chipid"),
@@ -1423,6 +1475,7 @@ void WiFiManager::handleInfo() {
       F("stamac"),
       F("conx")
     };
+
   #endif
 
   for(size_t i=0; i<infos;i++){
@@ -1845,7 +1898,7 @@ bool WiFiManager::erase(bool opt){
       DEBUG_WM(DEBUG_VERBOSE,"nvs_flash_erase: ", err!=ESP_OK ? (String)err : "Success");
       return err == ESP_OK;
     }
-  #else
+  #else 
     (void)opt;
   #endif
 
@@ -2569,15 +2622,16 @@ String WiFiManager::WiFi_SSID(){
 
 #ifdef ESP32
 void WiFiManager::WiFiEvent(WiFiEvent_t event,system_event_info_t info){
-    DEBUG_WM(DEBUG_VERBOSE,"[EVENT]",event);
+    DEBUG_WM(DEBUG_VERBOSE,"[EVENT]",event);  
     if(event == SYSTEM_EVENT_STA_DISCONNECTED){
       DEBUG_WM(DEBUG_VERBOSE,"[EVENT] WIFI_REASON:",info.disconnected.reason);
       if(info.disconnected.reason == WIFI_REASON_AUTH_EXPIRE || info.disconnected.reason == WIFI_REASON_AUTH_FAIL){
         _lastconxresulttmp = 7; // hack in wrong password internally, sdk emit WIFI_REASON_AUTH_EXPIRE on some routers on auth_fail
       } else _lastconxresulttmp = WiFi.status();
+
       if(info.disconnected.reason == WIFI_REASON_NO_AP_FOUND) DEBUG_WM(DEBUG_VERBOSE,"[EVENT] WIFI_REASON: NO_AP_FOUND");
       #ifdef esp32autoreconnect
-        DEBUG_WM(DEBUG_VERBOSE,"[Event] SYSTEM_EVENT_STA_DISCONNECTED, reconnecting");
+        DEBUG_WM(DEBUG_VERBOSE,"[Event] SYSTEM_EVENT_STA_DISCONNECTED, reconnecting");      
         WiFi.reconnect();
       #endif
   }

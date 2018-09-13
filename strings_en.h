@@ -45,6 +45,7 @@ const char HTTP_FORM_END[]         PROGMEM = "<br/><br/><button type='submit'>Sa
 const char HTTP_FORM_LABEL[]       PROGMEM = "<label for='{i}'>{t}</label>";
 const char HTTP_FORM_PARAM_HEAD[]  PROGMEM = "<hr><br/>";
 const char HTTP_FORM_PARAM[]       PROGMEM = "<br/><input id='{i}' name='{n}' maxlength='{l}' placeholder='' value='{v}' {c}>";
+const char HTTP_FORM_BOOL_PARAM[]  PROGMEM = "<br/><input type='checkbox' id='{i}' name='{n}' value='1' {b}>";
 
 const char HTTP_SCAN_LINK[]        PROGMEM = "<br/><form action='/wifi?refresh=1' method='POST'><button name='refresh' value='1'>Refresh</button></form>";
 const char HTTP_SAVED[]            PROGMEM = "<div class='msg'>Saving Credentials<br/>Trying to connect ESP to network.<br />If it fails reconnect to AP to try again</div>";
@@ -267,6 +268,7 @@ const char T_p[]                  PROGMEM = "{p}"; // @token p
 const char T_t[]                  PROGMEM = "{t}"; // @token t
 const char T_l[]                  PROGMEM = "{l}"; // @token l
 const char T_c[]                  PROGMEM = "{c}"; // @token c
+const char T_b[]                  PROGMEM = "{b}"; // @token b
 const char T_e[]                  PROGMEM = "{e}"; // @token e
 const char T_q[]                  PROGMEM = "{q}"; // @token q
 const char T_r[]                  PROGMEM = "{r}"; // @token r
